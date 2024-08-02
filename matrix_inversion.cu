@@ -3,7 +3,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
-
+#define MATRIX_DIM 3
 __global__ void initializeMatrix(float* d_matrix, int matrixDim, int seed)
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -31,19 +31,18 @@ void printMatrix(const float* matrix, int size) {
 
 int main()
 {
-    const int matrixDim = 9;
-    const int matrixSize = matrixDim * matrixDim * sizeof(float);
-    float h_matrix[matrixDim][matrixDim];
-    float h_invMatrix[matrixDim][matrixDim];
+    const int matrixSize = MATRIX_DIM * MATRIX_DIM * sizeof(float);
+    float h_matrix[MATRIX_DIM*MATRIX_DIM];
+    float h_invMatrix[MATRIX_DIM*MATRIX_DIM];
     
     float* d_matrix;
     cudaMalloc(&d_matrix, matrixSize);
 
-    dim3 threadsPerBlock(matrixDim, matrixDim);
+    dim3 threadsPerBlock(MATRIX_DIM, MATRIX_DIM);
     dim3 numBlocks(1, 1);
-    initializeMatrix<<<numBlocks, threadsPerBlock>>>(d_matrix, matrixDim, time(NULL));
+    initializeMatrix<<<numBlocks, threadsPerBlock>>>(d_matrix, MATRIX_DIM, time(NULL));
     cudaMemcpy(h_matrix, d_matrix, matrixSize, cudaMemcpyDeviceToHost);
 
     std::cout << "Current matrix:" << std::endl;
-    printMatrix((float*)h_matrix, matrixDim);
+    printMatrix((float*)h_matrix, MATRIX_DIM);
 }
