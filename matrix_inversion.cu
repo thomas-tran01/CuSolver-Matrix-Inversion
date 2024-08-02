@@ -21,6 +21,15 @@ __global__ void initializeMatrix(float* d_matrix, int matrixDim, int seed)
     }
 }
 
+__global__ void setIdentityMatrix(float* matrix, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n * n) {
+        int row = idx / n;
+        int col = idx % n;
+        matrix[idx] = (row == col) ? 1.0f : 0.0f;
+    }
+}
+
 
 void printMatrix(const float* matrix, int size) {
     for (int i = 0; i < size; ++i) {
@@ -34,9 +43,12 @@ void printMatrix(const float* matrix, int size) {
 int main()
 {
     const int matrixSize = MATRIX_DIM * MATRIX_DIM * sizeof(float);
+
+    //Host
     float h_matrix[MATRIX_DIM*MATRIX_DIM];
     float h_invMatrix[MATRIX_DIM*MATRIX_DIM];
     
+    // Device
     float* d_matrix;
     float* d_invMatrix;
     int* d_info;
@@ -51,7 +63,6 @@ int main()
 
     std::cout << "Current matrix:" << std::endl;
     printMatrix((float*)h_matrix, MATRIX_DIM);
-
 
     cusolverDnHandle_t cussolverHandle;
     cusolverDnCreate(&cussolverHandle);
@@ -68,7 +79,7 @@ int main()
     // LU factorization
     int* d_ipiv;
     cudaMalloc(&d_ipiv, MATRIX_DIM * sizeof(int));
-    cusolverDnSgetrf(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_work, NULL, d_info);
+    cusolverDnSgetrf(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_work, d_ipiv, d_info);
 
     // Copy LU matrix back to host
     cudaMemcpy(h_matrix, d_matrix, matrixSize, cudaMemcpyDeviceToHost);
@@ -83,17 +94,26 @@ int main()
         std::cout << "h_info: " << i << " = " << h_info[i] << std::endl;
     }
 
+    // Identity matrix
+    float* d_identity;
+    cudaMalloc(&d_identity, matrixSize);
+    cudaMemset(d_identity, 0, matrixSize);
+    int threadsPerBlock1D = 256;
+    int numBlocks1D = (MATRIX_DIM * MATRIX_DIM + threadsPerBlock1D - 1) / threadsPerBlock1D;
+    setIdentityMatrix<<<numBlocks1D, threadsPerBlock1D>>>(d_identity, MATRIX_DIM);
+
     // Invert the matrix
-    cusolverDnSgetrs(cussolverHandle, CUBLAS_OP_N, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_ipiv, d_invMatrix, MATRIX_DIM, d_info);
+    cusolverDnSgetrs(cussolverHandle, CUBLAS_OP_N, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_ipiv, d_identity, MATRIX_DIM, d_info);
 
     // Copy inverted matrix back to host
-    cudaMemcpy(h_invMatrix, d_invMatrix, matrixSize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_invMatrix, d_identity, matrixSize, cudaMemcpyDeviceToHost);
 
     printf("Inverted Matrix:\n");
     printMatrix(h_invMatrix, MATRIX_DIM);
 
     cudaFree(d_matrix);
     cudaFree(d_invMatrix);
+    cudaFree(d_identity);
     cudaFree(d_info);
     cudaFree(d_work);
     cudaFree(d_ipiv);
