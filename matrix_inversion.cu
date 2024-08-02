@@ -2,8 +2,10 @@
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <curand_kernel.h>
+#include <cusolverDn.h>
 
 #define MATRIX_DIM 3
+
 __global__ void initializeMatrix(float* d_matrix, int matrixDim, int seed)
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -36,7 +38,11 @@ int main()
     float h_invMatrix[MATRIX_DIM*MATRIX_DIM];
     
     float* d_matrix;
+    float* d_invMatrix;
+    int* d_info;
     cudaMalloc(&d_matrix, matrixSize);
+    cudaMalloc(&d_invMatrix, matrixSize);
+    cudaMalloc(&d_info, sizeof(int));
 
     dim3 threadsPerBlock(MATRIX_DIM, MATRIX_DIM);
     dim3 numBlocks(1, 1);
@@ -45,4 +51,52 @@ int main()
 
     std::cout << "Current matrix:" << std::endl;
     printMatrix((float*)h_matrix, MATRIX_DIM);
+
+
+    cusolverDnHandle_t cussolverHandle;
+    cusolverDnCreate(&cussolverHandle);
+    
+    // Workspace size query
+    int workspace_size = 0;
+    cusolverDnSgetrf_bufferSize(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, &workspace_size);
+
+    std::cout << "Workspace size:" << workspace_size << std::endl;
+
+    float* d_work;
+    cudaMalloc(&d_work, workspace_size * sizeof(float));
+
+    // LU factorization
+    int* d_ipiv;
+    cudaMalloc(&d_ipiv, MATRIX_DIM * sizeof(int));
+    cusolverDnSgetrf(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_work, NULL, d_info);
+
+    // Copy LU matrix back to host
+    cudaMemcpy(h_matrix, d_matrix, matrixSize, cudaMemcpyDeviceToHost);
+    std::cout << "LU matrix:" << std::endl;
+    printMatrix((float*)h_matrix, MATRIX_DIM);
+
+    int h_info[1];
+    cudaMemcpy(h_info,d_info,1*sizeof(int),cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < 1; ++i)
+    {
+        std::cout << "h_info: " << i << " = " << h_info[i] << std::endl;
+    }
+
+    // Invert the matrix
+    cusolverDnSgetrs(cussolverHandle, CUBLAS_OP_N, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_ipiv, d_invMatrix, MATRIX_DIM, d_info);
+
+    // Copy inverted matrix back to host
+    cudaMemcpy(h_invMatrix, d_invMatrix, matrixSize, cudaMemcpyDeviceToHost);
+
+    printf("Inverted Matrix:\n");
+    printMatrix(h_invMatrix, MATRIX_DIM);
+
+    cudaFree(d_matrix);
+    cudaFree(d_invMatrix);
+    cudaFree(d_info);
+    cudaFree(d_work);
+    cudaFree(d_ipiv);
+    cusolverDnDestroy(cussolverHandle);
+
 }
