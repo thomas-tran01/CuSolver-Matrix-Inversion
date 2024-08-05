@@ -4,7 +4,7 @@
 #include <curand_kernel.h>
 #include <cusolverDn.h>
 
-#define MATRIX_DIM 3
+#define MATRIX_DIM 300
 
 __global__ void initializeMatrix(float* d_matrix, int matrixDim, int seed)
 {
@@ -56,13 +56,23 @@ int main()
     cudaMalloc(&d_invMatrix, matrixSize);
     cudaMalloc(&d_info, sizeof(int));
 
-    dim3 threadsPerBlock(MATRIX_DIM, MATRIX_DIM);
-    dim3 numBlocks(1, 1);
-    initializeMatrix<<<numBlocks, threadsPerBlock>>>(d_matrix, MATRIX_DIM, time(NULL));
+    int threadsPerBlock = 16; 
+    dim3 blockSize(threadsPerBlock, threadsPerBlock);
+    dim3 gridSize((MATRIX_DIM + threadsPerBlock - 1) / threadsPerBlock, 
+                (MATRIX_DIM + threadsPerBlock - 1) / threadsPerBlock);
+
+
+    cudaEvent_t start, stop;
+    float computation_time;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start,0);
+
+    initializeMatrix<<<gridSize, blockSize>>>(d_matrix, MATRIX_DIM, time(NULL));
     cudaMemcpy(h_matrix, d_matrix, matrixSize, cudaMemcpyDeviceToHost);
 
     std::cout << "Current matrix:" << std::endl;
-    printMatrix((float*)h_matrix, MATRIX_DIM);
+    //printMatrix((float*)h_matrix, MATRIX_DIM);
 
     cusolverDnHandle_t cussolverHandle;
     cusolverDnCreate(&cussolverHandle);
@@ -70,8 +80,11 @@ int main()
     // Workspace size query
     int workspace_size = 0;
     cusolverDnSgetrf_bufferSize(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, &workspace_size);
-
+    size_t free, total;
+    cudaMemGetInfo(&free, &total);
+    std::cout << "GPU memory: " << free / (1024*1024) << "MB free of " << total / (1024*1024) << "MB total" << std::endl;
     std::cout << "Workspace size:" << workspace_size << std::endl;
+    std::cout << "Workspace size: " << workspace_size * sizeof(float) / (1024*1024) << " MB" << std::endl;
 
     float* d_work;
     cudaMalloc(&d_work, workspace_size * sizeof(float));
@@ -84,7 +97,7 @@ int main()
     // Copy LU matrix back to host
     cudaMemcpy(h_matrix, d_matrix, matrixSize, cudaMemcpyDeviceToHost);
     std::cout << "LU matrix:" << std::endl;
-    printMatrix((float*)h_matrix, MATRIX_DIM);
+    //printMatrix((float*)h_matrix, MATRIX_DIM);
 
     int h_info[1];
     cudaMemcpy(h_info,d_info,1*sizeof(int),cudaMemcpyDeviceToHost);
@@ -107,9 +120,17 @@ int main()
 
     // Copy inverted matrix back to host
     cudaMemcpy(h_invMatrix, d_identity, matrixSize, cudaMemcpyDeviceToHost);
+    cudaEventRecord(stop,0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&computation_time, start, stop);
 
     printf("Inverted Matrix:\n");
-    printMatrix(h_invMatrix, MATRIX_DIM);
+    //printMatrix(h_invMatrix, MATRIX_DIM);
+    printf("Computation took %.10fms\n", computation_time);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
 
     cudaFree(d_matrix);
     cudaFree(d_invMatrix);
