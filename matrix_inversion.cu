@@ -3,7 +3,8 @@
 #include <cusolverDn.h>
 #include <iomanip> 
 #include <fstream>
-
+#include <chrono>
+#include <sstream>
 #define MATRIX_DIM 5000
 #define ITER 10
 
@@ -33,8 +34,20 @@ void printMatrix(const float* matrix) {
     }
 }
 
+std::string getLogFileName() {
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S");
+    std::string filename = "log_" + ss.str() + ".csv";
+    return filename;
+}
+
+
 int main()
 {
+    std::ofstream logFile(getLogFileName());
     const int matrixSize = MATRIX_DIM * MATRIX_DIM * sizeof(float);
     float res[ITER];
 	float *curr = res;
@@ -99,6 +112,7 @@ int main()
 
         std::cout<< std::fixed << std::setprecision(5);
         std::cout<< "Computation took " << computation_time << "ms" << std::endl;
+        logFile << computation_time << "\n";
         //std::cout<< "Inverted Matrix:"<< std::endl;
         //std::cout<< h_invMatrix << std::endl;
         cudaEventDestroy(start);
