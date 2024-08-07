@@ -3,8 +3,8 @@
 #include <cusolverDn.h>
 #include <iomanip> 
 
-#define MATRIX_DIM 3
-#define ITER 100
+#define MATRIX_DIM 5000
+#define ITER 10
 
 void createMatrix(float* h_matrix)
 {
@@ -52,6 +52,7 @@ int main()
         int* d_info;
         float* d_work;
         int* d_ipiv;
+        int workspace_size = 0;
         cudaMalloc(&d_matrix, matrixSize);
         cudaMalloc(&d_invMatrix, matrixSize);
         cudaMalloc(&d_identity, matrixSize);
@@ -71,8 +72,6 @@ int main()
         cusolverDnHandle_t cussolverHandle;
         cusolverDnCreate(&cussolverHandle);
 
-        // Workspace size query
-        int workspace_size = 0;
         cusolverDnSgetrf_bufferSize(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, &workspace_size);
 
         // LU factorization
@@ -96,7 +95,7 @@ int main()
 
         *curr = computation_time;
         ++curr;
-        
+
         std::cout<< std::fixed << std::setprecision(5);
         std::cout<< "Computation took " << computation_time << "ms" << std::endl;
         //std::cout<< "Inverted Matrix:"<< std::endl;
