@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
 #include <iomanip> 
+#include <fstream>
 
 #define MATRIX_DIM 5000
 #define ITER 10
@@ -40,8 +41,8 @@ int main()
     for (int i = 0; i < ITER; ++i)
     {
         //Host
-        float h_matrix[MATRIX_DIM*MATRIX_DIM];
-        float h_invMatrix[MATRIX_DIM*MATRIX_DIM];
+        float* h_matrix = (float*)malloc(MATRIX_DIM * MATRIX_DIM * sizeof(float));
+        float* h_invMatrix = (float*)malloc(MATRIX_DIM * MATRIX_DIM * sizeof(float));
         createMatrix(h_matrix);
         //printMatrix(h_matrix);
         
@@ -57,7 +58,6 @@ int main()
         cudaMalloc(&d_invMatrix, matrixSize);
         cudaMalloc(&d_identity, matrixSize);
         cudaMalloc(&d_info, sizeof(int));
-        cudaMalloc(&d_work, workspace_size * sizeof(float));
         cudaMalloc(&d_ipiv, MATRIX_DIM * sizeof(int));
         cudaMemcpy(d_matrix, h_matrix, matrixSize, cudaMemcpyHostToDevice);
 
@@ -73,13 +73,14 @@ int main()
         cusolverDnCreate(&cussolverHandle);
 
         cusolverDnSgetrf_bufferSize(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, &workspace_size);
+        cudaMalloc(&d_work, workspace_size * sizeof(float));
 
         // LU factorization
         cusolverDnSgetrf(cussolverHandle, MATRIX_DIM, MATRIX_DIM, d_matrix, MATRIX_DIM, d_work, d_ipiv, d_info);
         cudaDeviceSynchronize();
 
         // Identity matrix
-        float h_identity[MATRIX_DIM*MATRIX_DIM];
+        float* h_identity = (float*)malloc(MATRIX_DIM * MATRIX_DIM * sizeof(float));
         setIdentityMatrix(h_identity, MATRIX_DIM);
 
         cudaMemcpy(d_identity, h_identity, matrixSize, cudaMemcpyHostToDevice);
