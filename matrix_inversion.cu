@@ -5,8 +5,8 @@
 #include <fstream>
 #include <chrono>
 #include <sstream>
-#define MATRIX_DIM 5000
-#define ITER 10
+#define MATRIX_DIM 1000
+#define ITER 100
 
 void createMatrix(float* h_matrix)
 {
